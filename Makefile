@@ -28,7 +28,7 @@
 PROJECT_DIR=$(shell pwd)
 
 # Supported OS and products
-PRODUCTS=BZip2 XZ OpenSSL libFFI
+PRODUCTS=BZip2 XZ OpenSSL libFFI ncurses
 OS_LIST=iOS tvOS watchOS
 
 # The versions to compile by default.
@@ -53,6 +53,8 @@ OPENSSL_SERIES=$(shell echo $(OPENSSL_VERSION) | grep -Eo "\d+\.\d+")
 MPDECIMAL_VERSION=4.0.0
 
 LIBFFI_VERSION=3.4.6
+
+NCURSES_VERSION=6.5
 
 CURL_FLAGS=--disable --fail --location --create-dirs --progress-bar
 
@@ -149,6 +151,16 @@ downloads/libffi-$(LIBFFI_VERSION).tar.gz:
 	@echo ">>> Download libFFI sources"
 	curl $(CURL_FLAGS) -o $@ \
 		https://github.com/libffi/libffi/releases/download/v$(LIBFFI_VERSION)/$(notdir $@)
+
+###########################################################################
+# Setup: ncurses
+###########################################################################
+
+# Download original ncurses source code archive.
+downloads/ncurses-$(NCURSES_VERSION).tar.gz:
+	@echo ">>> Download ncurses sources"
+	curl $(CURL_FLAGS) -o $@ \
+		https://ftp.gnu.org/gnu/ncurses/ncurses-$(NCURSES_VERSION).tar.gz
 
 ###########################################################################
 # Build for specified target (from $(TARGETS-*))
@@ -439,6 +451,60 @@ $$(LIBFFI_DIST-$(target)): $$(LIBFFI_LIB-$(target))
 libFFI-$(target): $$(LIBFFI_DIST-$(target))
 
 ###########################################################################
+# Target: ncurses
+###########################################################################
+
+NCURSES_SRCDIR-$(target)=build/$(os)/$(target)/ncurses-$(NCURSES_VERSION)
+NCURSES_INSTALL-$(target)=$(PROJECT_DIR)/install/$(os)/$(target)/ncurses-$(NCURSES_VERSION)
+NCURSES_LIB-$(target)=$$(NCURSES_INSTALL-$(target))/lib/libncursesw.a
+NCURSES_DIST-$(target)=dist/ncurses-$(NCURSES_VERSION)-$(BUILD_NUMBER)-$(target).tar.gz
+
+$$(NCURSES_SRCDIR-$(target))/configure: downloads/ncurses-$(NCURSES_VERSION).tar.gz
+	@echo ">>> Unpack NCURSES sources for $(target)"
+	mkdir -p $$(NCURSES_SRCDIR-$(target))
+	tar zxf $$< --strip-components 1 -C $$(NCURSES_SRCDIR-$(target))
+	# Patch the source to add support for new platforms
+	#cd $$(NCURSES_SRCDIR-$(target)) && patch -p1 < $(PROJECT_DIR)/patch/ncurses-$(NCURSES_VERSION).patch
+	# Touch the configure script to ensure that Make identifies it as up to date.
+	touch $$(NCURSES_SRCDIR-$(target))/configure
+
+$$(NCURSES_SRCDIR-$(target))/Makefile: $$(NCURSES_SRCDIR-$(target))/configure
+	# Configure the build
+	cd $$(NCURSES_SRCDIR-$(target)) && \
+		PATH="$(PROJECT_DIR)/install/$(os)/bin:$(PATH)" \
+		./configure \
+			CC="$$(CC-$(target))" \
+			CFLAGS="$$(CFLAGS-$(target)) -I$(PWD)/ncurses_sdk/" \
+			LDFLAGS="$$(LDFLAGS-$(target))" \
+			--disable-shared \
+			--enable-static \
+			--host=$$(TARGET_TRIPLE-$(target)) \
+			--build=$(HOST_ARCH)-apple-darwin \
+			--prefix="$$(NCURSES_INSTALL-$(target))" \
+			--disable-db-install \
+			--without-manpages \
+			--without-progs \
+			--without-tests \
+			2>&1 | tee -a ../ncurses-$(NCURSES_VERSION).config.log
+
+$$(NCURSES_LIB-$(target)): $$(NCURSES_SRCDIR-$(target))/Makefile
+	@echo ">>> Build and install NCURSES for $(target)"
+	cd $$(NCURSES_SRCDIR-$(target)) && \
+		PATH="$(PROJECT_DIR)/install/$(os)/bin:$(PATH)" \
+		make install \
+			2>&1 | tee -a ../ncurses-$(NCURSES_VERSION).build.log
+
+$$(NCURSES_DIST-$(target)): $$(NCURSES_LIB-$(target))
+	@echo ">>> Build NCURSES distribution for $(target)"
+	mkdir -p dist
+
+	cd $$(NCURSES_INSTALL-$(target)) && tar zcvf $(PROJECT_DIR)/$$(NCURSES_DIST-$(target)) lib include
+
+.PHONY: ncurses-$(target)
+ncurses-$(target): $$(NCURSES_DIST-$(target))
+
+
+###########################################################################
 # Target: Debug
 ###########################################################################
 
@@ -504,12 +570,13 @@ SDK_ARCHES-$(sdk)=$$(sort $$(subst .,,$$(suffix $$(SDK_TARGETS-$(sdk)))))
 # Expand the build-target macro for target on this OS
 $$(foreach target,$$(SDK_TARGETS-$(sdk)),$$(eval $$(call build-target,$$(target),$(os))))
 
-.PHONY: BZip2-$(sdk) XZ-$(sdk) OpenSSL-$(sdk) libFFI-$(sdk)
+.PHONY: BZip2-$(sdk) XZ-$(sdk) OpenSSL-$(sdk) libFFI-$(sdk) ncurses-$(sdk)
 BZip2-$(sdk): $$(foreach target,$$(SDK_TARGETS-$(sdk)),BZip2-$$(target))
 XZ-$(sdk): $$(foreach target,$$(SDK_TARGETS-$(sdk)),XZ-$$(target))
 OpenSSL-$(sdk): $$(foreach target,$$(SDK_TARGETS-$(sdk)),OpenSSL-$$(target))
 mpdecimal-$(sdk): $$(foreach target,$$(SDK_TARGETS-$(sdk)),mpdecimal-$$(target))
 libFFI-$(sdk): $$(foreach target,$$(SDK_TARGETS-$(sdk)),libFFI-$$(target))
+ncurses-$(sdk): $$(foreach target,$$(SDK_TARGETS-$(sdk)),ncurses-$$(target))
 
 ###########################################################################
 # SDK: Debug
@@ -563,8 +630,9 @@ XZ-$(os): $$(foreach sdk,$$(SDKS-$(os)),XZ-$$(sdk))
 OpenSSL-$(os): $$(foreach sdk,$$(SDKS-$(os)),OpenSSL-$$(sdk))
 mpdecimal-$(os): $$(foreach sdk,$$(SDKS-$(os)),mpdecimal-$$(sdk))
 libFFI-$(os): $$(foreach sdk,$$(SDKS-$(os)),libFFI-$$(sdk))
+ncurses-$(os): $$(foreach sdk,$$(SDKS-$(os)),ncurses-$$(sdk))
 
-.PHONY: clean-BZip2-$(os) clean-XZ-$(os) clean-OpenSSL-$(os) clean-mpdecimal-$(os) clean-libFFI-$(os)
+.PHONY: clean-BZip2-$(os) clean-XZ-$(os) clean-OpenSSL-$(os) clean-mpdecimal-$(os) clean-libFFI-$(os) clean-ncurses-$(os)
 clean-BZip2-$(os):
 	@echo ">>> Clean BZip2 build products on $(os)"
 	rm -rf \
@@ -610,8 +678,17 @@ clean-libFFI-$(os):
 		install/$(os)/*/libffi-$(LIBFFI_VERSION).*.log \
 		dist/libffi-$(LIBFFI_VERSION)-*
 
+clean-ncurses-$(os):
+	@echo ">>> Clean ncurses build products on $(os)"
+	rm -rf \
+		build/$(os)/*/ncurses-$(NCURSES_VERSION) \
+		build/$(os)/*/ncurses-$(NCURSES_VERSION).*.log \
+		install/$(os)/*/ncurses-$(NCURSES_VERSION) \
+		install/$(os)/*/ncurses-$(NCURSES_VERSION).*.log \
+		dist/ncurses-$(NCURSES_VERSION)-*
+
 .PHONY: $(os)
-$(os): BZip2-$(os) XZ-$(os) OpenSSL-$(os) mpdecimal-$(os) libFFI-$(os)
+$(os): BZip2-$(os) XZ-$(os) OpenSSL-$(os) mpdecimal-$(os) libFFI-$(os) ncurses-$(os)
 
 ###########################################################################
 # Build: Debug
@@ -631,18 +708,20 @@ endef # build
 vars: $(foreach os,$(OS_LIST),vars-$(os))
 
 # Expand the targets for each product
-.PHONY: BZip2 XZ OpenSSL mpdecimal libFFI
+.PHONY: BZip2 XZ OpenSSL mpdecimal libFFI ncurses
 BZip2: $(foreach os,$(OS_LIST),BZip2-$(os))
 XZ: $(foreach os,$(OS_LIST),XZ-$(os))
 OpenSSL: $(foreach os,$(OS_LIST),OpenSSL-$(os))
 mpdecimal: $(foreach os,$(OS_LIST),mpdecimal-$(os))
 libFFI: $(foreach os,$(OS_LIST),libFFI-$(os))
+ncurses: $(foreach os,$(OS_LIST),ncurses-$(os))
 
 clean-BZip2: $(foreach os,$(OS_LIST),clean-BZip2-$(os))
 clean-XZ: $(foreach os,$(OS_LIST),clean-XZ-$(os))
 clean-OpenSSL: $(foreach os,$(OS_LIST),clean-OpenSSL-$(os))
 clean-mpdecimal: $(foreach os,$(OS_LIST),clean-mpdecimal-$(os))
 clean-libFFI: $(foreach os,$(OS_LIST),clean-libFFI-$(os))
+clean-ncurses: $(foreach os,$(OS_LIST),clean-ncurses-$(os))
 
 # Expand the build macro for every OS
 $(foreach os,$(OS_LIST),$(eval $(call build,$(os))))
