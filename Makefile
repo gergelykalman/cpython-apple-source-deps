@@ -474,7 +474,7 @@ $$(NCURSES_SRCDIR-$(target))/Makefile: $$(NCURSES_SRCDIR-$(target))/configure
 		PATH="$(PROJECT_DIR)/install/$(os)/bin:$(PATH)" \
 		./configure \
 			CC="$$(CC-$(target))" \
-			CFLAGS="$$(CFLAGS-$(target)) -I$(PWD)/ncurses_sdk/" \
+			CFLAGS="$$(CFLAGS-$(target)) -I$(PROJECT_DIR)/sdk/ncurses/" \
 			LDFLAGS="$$(LDFLAGS-$(target))" \
 			--disable-shared \
 			--enable-static \
