@@ -57,7 +57,8 @@ LIBFFI_VERSION=3.4.6
 CURL_FLAGS=--disable --fail --location --create-dirs --progress-bar
 
 # iOS targets
-TARGETS-iOS=iphonesimulator.x86_64 iphonesimulator.arm64 iphoneos.arm64
+#TARGETS-iOS=iphonesimulator.x86_64 iphonesimulator.arm64 iphoneos.arm64
+TARGETS-iOS=iphoneos.arm64
 VERSION_MIN-iOS=13.0
 CFLAGS-iOS=-mios-version-min=$(VERSION_MIN-iOS)
 
