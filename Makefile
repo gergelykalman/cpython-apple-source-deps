@@ -55,6 +55,8 @@ MPDECIMAL_VERSION=4.0.0
 LIBFFI_VERSION=3.4.6
 
 NCURSES_VERSION=6.5
+#NCURSES_VERSION=5.4
+#NCURSES_VERSION=6.3
 
 CURL_FLAGS=--disable --fail --location --create-dirs --progress-bar
 
@@ -470,14 +472,12 @@ $$(NCURSES_SRCDIR-$(target))/configure: downloads/ncurses-$(NCURSES_VERSION).tar
 
 $$(NCURSES_SRCDIR-$(target))/Makefile: $$(NCURSES_SRCDIR-$(target))/configure
 	# Configure the build
-	cd $$(NCURSES_SRCDIR-$(target)) && \
+	#cd $$(NCURSES_SRCDIR-$(target)) && \
 		PATH="$(PROJECT_DIR)/install/$(os)/bin:$(PATH)" \
 		./configure \
 			CC="$$(CC-$(target))" \
 			CFLAGS="$$(CFLAGS-$(target)) -I$(PROJECT_DIR)/sdk/ncurses/" \
 			LDFLAGS="$$(LDFLAGS-$(target))" \
-			--disable-shared \
-			--enable-static \
 			--host=$$(TARGET_TRIPLE-$(target)) \
 			--build=$(HOST_ARCH)-apple-darwin \
 			--prefix="$$(NCURSES_INSTALL-$(target))" \
@@ -485,6 +485,25 @@ $$(NCURSES_SRCDIR-$(target))/Makefile: $$(NCURSES_SRCDIR-$(target))/configure
 			--without-manpages \
 			--without-progs \
 			--without-tests \
+			--without-gpm \
+			--disable-wattr-macros \
+			2>&1 | tee -a ../ncurses-$(NCURSES_VERSION).config.log
+
+	cd $$(NCURSES_SRCDIR-$(target)) && \
+		PATH="$(PROJECT_DIR)/install/$(os)/bin:$(PATH)" \
+		./configure \
+			CC="$$(CC-$(target))" \
+			CFLAGS="$$(CFLAGS-$(target)) -I$(PROJECT_DIR)/sdk/ncurses/" \
+			LDFLAGS="$$(LDFLAGS-$(target))" \
+			--host=$$(TARGET_TRIPLE-$(target)) \
+			--build=$(HOST_ARCH)-apple-darwin \
+			--prefix="$$(NCURSES_INSTALL-$(target))" \
+			--disable-db-install \
+			--without-manpages \
+			--without-progs \
+			--without-tests \
+			--without-gpm \
+			--disable-wattr-macros \
 			2>&1 | tee -a ../ncurses-$(NCURSES_VERSION).config.log
 
 $$(NCURSES_LIB-$(target)): $$(NCURSES_SRCDIR-$(target))/Makefile
