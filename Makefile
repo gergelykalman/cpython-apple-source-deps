@@ -28,7 +28,7 @@
 PROJECT_DIR=$(shell pwd)
 
 # Supported OS and products
-PRODUCTS=BZip2 XZ OpenSSL libFFI ncurses
+PRODUCTS=BZip2 XZ OpenSSL libFFI ncurses libreadline
 OS_LIST=iOS tvOS watchOS
 
 # The versions to compile by default.
@@ -59,6 +59,8 @@ LIBFFI_VERSION=3.4.6
 NCURSES_VERSION=6.4
 #NCURSES_VERSION=6.3
 #NCURSES_VERSION=5.4
+
+LIBREADLINE_VERSION=8.1
 
 CURL_FLAGS=--disable --fail --location --create-dirs --progress-bar
 
@@ -165,6 +167,16 @@ downloads/ncurses-$(NCURSES_VERSION).tar.gz:
 	@echo ">>> Download ncurses sources"
 	curl $(CURL_FLAGS) -o $@ \
 		https://ftp.gnu.org/gnu/ncurses/ncurses-$(NCURSES_VERSION).tar.gz
+
+###########################################################################
+# Setup: libreadline
+###########################################################################
+
+# Download original libreadline source code archive.
+downloads/libreadline-$(LIBREADLINE_VERSION).tar.gz:
+	@echo ">>> Download libreadline sources"
+	curl $(CURL_FLAGS) -o $@ \
+		https://ftp.gnu.org/gnu/readline/readline-$(LIBREADLINE_VERSION).tar.gz
 
 ###########################################################################
 # Build for specified target (from $(TARGETS-*))
@@ -487,6 +499,8 @@ $$(NCURSES_SRCDIR-$(target))/Makefile: $$(NCURSES_SRCDIR-$(target))/configure
 			--without-progs \
 			--without-tests \
 			--without-gpm \
+			--enable-widec \
+			--disable-wattr-macros \
 			2>&1 | tee -a ../ncurses-$(NCURSES_VERSION).config.log
 
 $$(NCURSES_LIB-$(target)): $$(NCURSES_SRCDIR-$(target))/Makefile
@@ -504,6 +518,56 @@ $$(NCURSES_DIST-$(target)): $$(NCURSES_LIB-$(target))
 
 .PHONY: ncurses-$(target)
 ncurses-$(target): $$(NCURSES_DIST-$(target))
+
+
+###########################################################################
+# Target: libreadline
+###########################################################################
+
+LIBREADLINE_SRCDIR-$(target)=build/$(os)/$(target)/libreadline-$(LIBREADLINE_VERSION)
+LIBREADLINE_INSTALL-$(target)=$(PROJECT_DIR)/install/$(os)/$(target)/libreadline-$(LIBREADLINE_VERSION)
+LIBREADLINE_LIB-$(target)=$$(LIBREADLINE_INSTALL-$(target))/lib/libreadline.a
+LIBREADLINE_DIST-$(target)=dist/libreadline-$(LIBREADLINE_VERSION)-$(BUILD_NUMBER)-$(target).tar.gz
+
+$$(LIBREADLINE_SRCDIR-$(target))/configure: downloads/libreadline-$(LIBREADLINE_VERSION).tar.gz
+	@echo ">>> Unpack LIBREADLINE sources for $(target)"
+	mkdir -p $$(LIBREADLINE_SRCDIR-$(target))
+	tar zxf $$< --strip-components 1 -C $$(LIBREADLINE_SRCDIR-$(target))
+	# Patch the source to add support for new platforms
+	#cd $$(LIBREADLINE_SRCDIR-$(target)) && patch -p1 < $(PROJECT_DIR)/patch/libreadline-$(LIBREADLINE_VERSION).patch
+	# Touch the configure script to ensure that Make identifies it as up to date.
+	touch $$(LIBREADLINE_SRCDIR-$(target))/configure
+
+$$(LIBREADLINE_SRCDIR-$(target))/Makefile: $$(LIBREADLINE_SRCDIR-$(target))/configure
+	# Configure the build
+	cd $$(LIBREADLINE_SRCDIR-$(target)) && \
+		PATH="$(PROJECT_DIR)/install/$(os)/bin:$(PATH)" \
+		./configure \
+			CC="$$(CC-$(target))" \
+			CFLAGS="$$(CFLAGS-$(target)) -I$(PROJECT_DIR)/sdk/libreadline/" \
+			LDFLAGS="$$(LDFLAGS-$(target))" \
+			--enable-shared \
+			--enable-static \
+			--host=$$(TARGET_TRIPLE-$(target)) \
+			--build=$(HOST_ARCH)-apple-darwin \
+			--prefix="$$(LIBREADLINE_INSTALL-$(target))" \
+			2>&1 | tee -a ../libreadline-$(LIBREADLINE_VERSION).config.log
+
+$$(LIBREADLINE_LIB-$(target)): $$(LIBREADLINE_SRCDIR-$(target))/Makefile
+	@echo ">>> Build and install LIBREADLINE for $(target)"
+	cd $$(LIBREADLINE_SRCDIR-$(target)) && \
+		PATH="$(PROJECT_DIR)/install/$(os)/bin:$(PATH)" \
+		make install \
+			2>&1 | tee -a ../libreadline-$(LIBREADLINE_VERSION).build.log
+
+$$(LIBREADLINE_DIST-$(target)): $$(LIBREADLINE_LIB-$(target))
+	@echo ">>> Build LIBREADLINE distribution for $(target)"
+	mkdir -p dist
+
+	cd $$(LIBREADLINE_INSTALL-$(target)) && tar zcvf $(PROJECT_DIR)/$$(LIBREADLINE_DIST-$(target)) lib include
+
+.PHONY: libreadline-$(target)
+libreadline-$(target): $$(LIBREADLINE_DIST-$(target))
 
 
 ###########################################################################
@@ -572,13 +636,14 @@ SDK_ARCHES-$(sdk)=$$(sort $$(subst .,,$$(suffix $$(SDK_TARGETS-$(sdk)))))
 # Expand the build-target macro for target on this OS
 $$(foreach target,$$(SDK_TARGETS-$(sdk)),$$(eval $$(call build-target,$$(target),$(os))))
 
-.PHONY: BZip2-$(sdk) XZ-$(sdk) OpenSSL-$(sdk) libFFI-$(sdk) ncurses-$(sdk)
+.PHONY: BZip2-$(sdk) XZ-$(sdk) OpenSSL-$(sdk) libFFI-$(sdk) ncurses-$(sdk) libreadline-$(sdk)
 BZip2-$(sdk): $$(foreach target,$$(SDK_TARGETS-$(sdk)),BZip2-$$(target))
 XZ-$(sdk): $$(foreach target,$$(SDK_TARGETS-$(sdk)),XZ-$$(target))
 OpenSSL-$(sdk): $$(foreach target,$$(SDK_TARGETS-$(sdk)),OpenSSL-$$(target))
 mpdecimal-$(sdk): $$(foreach target,$$(SDK_TARGETS-$(sdk)),mpdecimal-$$(target))
 libFFI-$(sdk): $$(foreach target,$$(SDK_TARGETS-$(sdk)),libFFI-$$(target))
 ncurses-$(sdk): $$(foreach target,$$(SDK_TARGETS-$(sdk)),ncurses-$$(target))
+libreadline-$(sdk): $$(foreach target,$$(SDK_TARGETS-$(sdk)),libreadline-$$(target))
 
 ###########################################################################
 # SDK: Debug
@@ -633,8 +698,9 @@ OpenSSL-$(os): $$(foreach sdk,$$(SDKS-$(os)),OpenSSL-$$(sdk))
 mpdecimal-$(os): $$(foreach sdk,$$(SDKS-$(os)),mpdecimal-$$(sdk))
 libFFI-$(os): $$(foreach sdk,$$(SDKS-$(os)),libFFI-$$(sdk))
 ncurses-$(os): $$(foreach sdk,$$(SDKS-$(os)),ncurses-$$(sdk))
+libreadline-$(os): $$(foreach sdk,$$(SDKS-$(os)),libreadline-$$(sdk))
 
-.PHONY: clean-BZip2-$(os) clean-XZ-$(os) clean-OpenSSL-$(os) clean-mpdecimal-$(os) clean-libFFI-$(os) clean-ncurses-$(os)
+.PHONY: clean-BZip2-$(os) clean-XZ-$(os) clean-OpenSSL-$(os) clean-mpdecimal-$(os) clean-libFFI-$(os) clean-ncurses-$(os) clean-libreadline-$(os)
 clean-BZip2-$(os):
 	@echo ">>> Clean BZip2 build products on $(os)"
 	rm -rf \
@@ -689,8 +755,17 @@ clean-ncurses-$(os):
 		install/$(os)/*/ncurses-$(NCURSES_VERSION).*.log \
 		dist/ncurses-$(NCURSES_VERSION)-*
 
+clean-libreadline-$(os):
+	@echo ">>> Clean libreadline build products on $(os)"
+	rm -rf \
+		build/$(os)/*/libreadline-$(LIBREADLINE_VERSION) \
+		build/$(os)/*/libreadline-$(LIBREADLINE_VERSION).*.log \
+		install/$(os)/*/libreadline-$(LIBREADLINE_VERSION) \
+		install/$(os)/*/libreadline-$(LIBREADLINE_VERSION).*.log \
+		dist/libreadline-$(LIBREADLINE_VERSION)-*
+
 .PHONY: $(os)
-$(os): BZip2-$(os) XZ-$(os) OpenSSL-$(os) mpdecimal-$(os) libFFI-$(os) ncurses-$(os)
+$(os): BZip2-$(os) XZ-$(os) OpenSSL-$(os) mpdecimal-$(os) libFFI-$(os) ncurses-$(os) libreadline-$(os)
 
 ###########################################################################
 # Build: Debug
@@ -710,13 +785,14 @@ endef # build
 vars: $(foreach os,$(OS_LIST),vars-$(os))
 
 # Expand the targets for each product
-.PHONY: BZip2 XZ OpenSSL mpdecimal libFFI ncurses
+.PHONY: BZip2 XZ OpenSSL mpdecimal libFFI ncurses libreadline
 BZip2: $(foreach os,$(OS_LIST),BZip2-$(os))
 XZ: $(foreach os,$(OS_LIST),XZ-$(os))
 OpenSSL: $(foreach os,$(OS_LIST),OpenSSL-$(os))
 mpdecimal: $(foreach os,$(OS_LIST),mpdecimal-$(os))
 libFFI: $(foreach os,$(OS_LIST),libFFI-$(os))
 ncurses: $(foreach os,$(OS_LIST),ncurses-$(os))
+libreadline: $(foreach os,$(OS_LIST),libreadline-$(os))
 
 clean-BZip2: $(foreach os,$(OS_LIST),clean-BZip2-$(os))
 clean-XZ: $(foreach os,$(OS_LIST),clean-XZ-$(os))
@@ -724,6 +800,7 @@ clean-OpenSSL: $(foreach os,$(OS_LIST),clean-OpenSSL-$(os))
 clean-mpdecimal: $(foreach os,$(OS_LIST),clean-mpdecimal-$(os))
 clean-libFFI: $(foreach os,$(OS_LIST),clean-libFFI-$(os))
 clean-ncurses: $(foreach os,$(OS_LIST),clean-ncurses-$(os))
+clean-libreadline: $(foreach os,$(OS_LIST),clean-libreadline-$(os))
 
 # Expand the build macro for every OS
 $(foreach os,$(OS_LIST),$(eval $(call build,$(os))))
