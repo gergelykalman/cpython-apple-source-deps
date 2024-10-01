@@ -28,7 +28,7 @@
 PROJECT_DIR=$(shell pwd)
 
 # Supported OS and products
-PRODUCTS=BZip2 XZ OpenSSL libFFI ncurses libreadline
+PRODUCTS=BZip2 XZ OpenSSL libFFI #ncurses libreadline
 OS_LIST=iOS tvOS watchOS
 
 # The versions to compile by default.
