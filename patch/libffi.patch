@@ -1,0 +1,18 @@
+diff -Naur orig/generate-darwin-source-and-headers.py mine/generate-darwin-source-and-headers.py
+--- orig/generate-darwin-source-and-headers.py	2023-10-21 14:41:22.000000000 +0200
++++ mine/generate-darwin-source-and-headers.py	2024-11-08 18:26:00.632573247 +0100
+@@ -270,10 +270,10 @@
+     platform_headers = collections.defaultdict(set)
+ 
+     if generate_ios:
+-        build_target(ios_simulator_i386_platform, platform_headers)
+-        build_target(ios_simulator_x86_64_platform, platform_headers)
+-        build_target(ios_simulator_arm64_platform, platform_headers)
+-        build_target(ios_device_armv7_platform, platform_headers)
++#        build_target(ios_simulator_i386_platform, platform_headers)
++#        build_target(ios_simulator_x86_64_platform, platform_headers)
++#        build_target(ios_simulator_arm64_platform, platform_headers)
++#        build_target(ios_device_armv7_platform, platform_headers)
+         build_target(ios_device_arm64_platform, platform_headers)
+     if generate_osx:
+         build_target(desktop_x86_64_platform, platform_headers)

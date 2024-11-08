@@ -685,6 +685,10 @@ $$(LIBFFI_SRCDIR-$(os))/darwin_common/include/ffi.h: downloads/libffi-$(LIBFFI_V
 	@echo ">>> Unpack and configure libFFI sources on $(os)"
 	mkdir -p $$(LIBFFI_SRCDIR-$(os))
 	tar zxf $$< --strip-components 1 -C $$(LIBFFI_SRCDIR-$(os))
+
+	# Patch the source to prevent building for architectures we don't have
+	cd $$(LIBFFI_SRCDIR-$(os)) && patch -p1 < $(PROJECT_DIR)/patch/libffi.patch
+
 	# Configure the build
 	cd $$(LIBFFI_SRCDIR-$(os)) && \
 		python3 generate-darwin-source-and-headers.py --only-$(shell echo $(os) | tr '[:upper:]' '[:lower:]') \
